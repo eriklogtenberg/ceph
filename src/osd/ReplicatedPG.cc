@@ -686,7 +686,9 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  if (head == backfill_pos) {
+  if (backfill_reserved &&
+      head == backfill_pos) {
+    dout(20) << __func__ << " head == backfill_pos" << dendl;
     wait_for_backfill_pos(op);
     return;
   }
