@@ -57,7 +57,15 @@ public:
   };
 
   LogClient(CephContext *cct, Messenger *m, MonMap *mm,
-	    enum logclient_flag_t flags);
+	    enum logclient_flag_t flags,
+            const std::string name = "");
+  LogClient(CephContext *cct, Messenger *m, MonMap *mm,
+            enum logclient_flag_t flags,
+            const std::string &name,
+            const std::string &override_channel,
+            const std::string &override_prio);
+
+  void parse_options(const string &channel, const string &prio);
 
   bool handle_log_ack(MLogAck *m);
 
@@ -96,6 +104,19 @@ public:
   Message *get_mon_log_message();
   bool are_pending();
 
+  void set_log_to_syslog(bool v) {
+    log_to_syslog = v;
+  }
+  void set_log_channel(const std::string& v) {
+    log_channel = v;
+  }
+  void set_log_prio(const std::string& v) {
+    log_prio = v;
+  }
+  std::string get_log_prio() { return log_prio; }
+  std::string get_log_channel() { return log_channel; }
+  bool must_log_to_syslog() { return log_to_syslog; }
+
 private:
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
@@ -109,6 +130,11 @@ private:
   version_t last_log_sent;
   version_t last_log;
   std::deque<LogEntry> log_queue;
+
+  std::string log_name;
+  std::string log_channel;
+  std::string log_prio;
+  bool log_to_syslog;
 
   friend class LogClientTemp;
 };

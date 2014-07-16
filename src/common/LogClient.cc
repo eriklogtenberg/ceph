@@ -15,6 +15,7 @@
 
 
 #include "include/types.h"
+#include "include/str_map.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -40,11 +41,35 @@
 #define dout_subsys ceph_subsys_monc
 
 LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
-		     enum logclient_flag_t flags)
+		     enum logclient_flag_t flags,
+                     const string name)
   : cct(cct), messenger(m), monmap(mm), is_mon(flags & FLAG_MON),
-    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0)
+    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0),
+    log_name(name), log_to_syslog(false)
 {
+  parse_options(cct->_conf->clog_to_syslog_facility,
+                cct->_conf->clog_to_syslog_level);
+/*
+  log_to_syslog = cct->_conf->clog_to_syslog;
+  log_facility = cct->_conf->clog_to_syslog_facility;
+  log_level = cct->_conf->clog_to_syslog_level;
+  */
 }
+
+LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
+		     enum logclient_flag_t flags,
+                     const string& name,
+                     const string& override_channel,
+                     const string& override_prio)
+  : cct(cct), messenger(m), monmap(mm), is_mon(flags & FLAG_MON),
+    log_lock("LogClient::log_lock"), last_log_sent(0), last_log(0),
+    log_name(name), log_to_syslog(false)
+//    log_facility(syslog_fac), log_level(syslog_lvl),
+//    log_to_syslog(log_to_syslog)
+{
+  parse_options(override_channel, override_prio);
+}
+
 
 LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
   : type(type_), parent(parent_)
@@ -61,6 +86,26 @@ LogClientTemp::~LogClientTemp()
 {
   if (ss.peek() != EOF)
     parent.do_log(type, ss);
+}
+
+void LogClient::parse_options(const string &channel, const string &prio)
+{
+  map<string,string> log_channel_map;
+  map<string,string> log_prio_map;
+  ostringstream oss;
+
+  if (log_name.empty())
+    log_name = clog_channel_to_string(CLOG_CHANNEL_DEFAULT);
+
+  int r = get_str_map(channel, oss, &log_channel_map);
+  assert(r == 0);
+  r = get_str_map(prio, oss, &log_prio_map);
+  assert(r == 0);
+
+  log_channel = get_str_map_val(log_channel_map, log_name,
+                                clog_channel_to_string(CLOG_CHANNEL_DEFAULT));
+  log_prio = get_str_map_val(log_prio_map, log_name,
+                             clog_type_to_string(CLOG_INFO));
 }
 
 void LogClient::do_log(clog_type prio, std::stringstream& ss)
@@ -84,11 +129,12 @@ void LogClient::do_log(clog_type prio, const std::string& s)
   e.seq = ++last_log;
   e.prio = prio;
   e.msg = s;
+  e.channel = get_log_channel();
 
   // log to syslog?
-  if (cct->_conf->clog_to_syslog) {
-    e.log_to_syslog(cct->_conf->clog_to_syslog_level,
-		    cct->_conf->clog_to_syslog_facility);
+  if (must_log_to_syslog()) {
+    ldout(cct,0) << __func__ << " log to syslog"  << dendl;
+    e.log_to_syslog(get_log_prio(), get_log_channel());
   }
 
   // log to monitor?
@@ -172,6 +218,17 @@ bool LogClient::handle_log_ack(MLogAck *m)
 {
   Mutex::Locker l(log_lock);
   ldout(cct,10) << "handle_log_ack " << *m << dendl;
+
+  string channel = m->channel;
+  if (channel.empty())
+    channel = clog_channel_to_string(CLOG_CHANNEL_DEFAULT);
+
+  if (channel == get_log_channel()) {
+    ldout(cct,15) << __func__ << " msg facility '" << m->channel
+                  << "' != my facility '" << get_log_channel()
+                  << "' -- ignore" << dendl;
+    return false;
+  }
 
   version_t last = m->last;
 
