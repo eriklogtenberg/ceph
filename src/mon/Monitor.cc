@@ -142,6 +142,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
   clog(cct_, messenger, monmap, LogClient::FLAG_MON),
+  audit_clog(cct_, messenger, monmap, LogClient::FLAG_MON, "audit"),
   key_server(cct, &keyring),
   auth_cluster_required(cct,
 			cct->_conf->auth_supported.length() ?
@@ -182,6 +183,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   rank = -1;
 
   clog.set_log_to_syslog(cct->_conf->clog_to_syslog);
+  audit_clog.set_log_to_syslog(cct->_conf->audit_clog_to_syslog);
+
   paxos = new Paxos(this, "paxos");
 
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, paxos, "mdsmap");
@@ -2313,9 +2316,16 @@ void Monitor::handle_command(MMonCommand *m)
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
+    audit_clog.info() << "from='" << session->inst << "' "
+                      << "entity='" << session->auth_handler->get_entity_name()
+                      << "' cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
+
+  audit_clog.info() << "from='" << session->inst << "' "
+    << "entity='" << session->auth_handler->get_entity_name()
+    << "' cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
@@ -3078,6 +3088,7 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
 
     case MSG_LOGACK:
       clog.handle_log_ack((MLogAck*)m);
+      audit_clog.handle_log_ack((MLogAck*)m);
       m->put();
       break;
 
