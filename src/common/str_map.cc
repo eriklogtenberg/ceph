@@ -66,3 +66,16 @@ int get_str_map(const string &str,
   }
   return 0;
 }
+
+string get_str_map_val(const map<string,string> &str_map,
+                    const string &key,
+                    const string &def_val)
+{
+  map<string,string>::const_iterator p = str_map.begin();
+  if (p == str_map.end()) {
+    return def_val;
+  } else if (p->second.empty()) {
+    return p->first;
+  }
+  return p->second;
+}

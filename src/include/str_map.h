@@ -56,4 +56,13 @@ extern int get_str_map(const std::string &str,
 		       std::ostream &ss,
 		       std::map<std::string,std::string> *str_map);
 
+/**
+ * Checks if **str_map** contains **key**.  If not, returns **def_val**.
+ * Otherwise checks if the value of **key** is an empty string.  If so
+ * will return **key**.  Otherwise returns the value of **key**.
+ */
+extern std::string get_str_map_val(
+    const std::map<std::string,std::string> &str_map,
+    const std::string &key,
+    const std::string &def_val);
 #endif
