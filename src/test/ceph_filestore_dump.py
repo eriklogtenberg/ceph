@@ -532,7 +532,7 @@ def main():
                     lines = get_lines(VALFILE)
                     val = lines[0]
                     if exp != val:
-                        logging.error("For key {key} got value {got} instead of {expected}".format(key=key.strip("_"), got=val, expected=exp))
+                        logging.error("For key {key} got value {got} instead of {expected}".format(key=key, got=val, expected=exp))
                         ERRORS += 1
                 if len(values) != 0:
                     logging.error("Not all keys found, remaining keys:")
