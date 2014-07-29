@@ -28,7 +28,8 @@ using namespace std;
 
 class MMonCommand;
 
-class LogMonitor : public PaxosService {
+class LogMonitor : public PaxosService,
+                   public md_config_obs_t {
 private:
   multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
@@ -110,6 +111,27 @@ private:
    */
   int sub_name_to_id(const string& n);
 
+  int init() {
+    g_conf->add_observer(this);
+  }
+
+  void on_shutdown() {
+    g_conf->remove_observer(this);
+  }
+
+  const chat **get_tracket_conf_keys() const {
+    static const char* KEYS[] = {
+      "mon_cluster_log_to_syslog",
+      "mon_cluster_log_to_syslog_level",
+      "mon_cluster_log_to_syslog_facility",
+      "mon_cluster_log_file",
+      "mon_cluster_log_file_level",
+      NULL
+    };
+    return KEYS;
+  }
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set<std::string> &changed);
 };
 
 inline ostream& operator<<(ostream& out, LogMonitor::log_channel_info& info)
