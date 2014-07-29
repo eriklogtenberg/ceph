@@ -103,7 +103,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     return;
   assert(version >= summary.version);
 
-  bufferlist blog;
+  map<string, bufferlist> channel_blog;
 
   version_t latest_full = get_version_latest_full();
   dout(10) << __func__ << " latest full " << latest_full << dendl;
@@ -132,17 +132,33 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       le.decode(p);
       dout(7) << "update_from_paxos applying incremental log " << summary.version+1 <<  " " << le << dendl;
 
-      if (g_conf->mon_cluster_log_to_syslog) {
-	le.log_to_syslog(g_conf->mon_cluster_log_to_syslog_level,
-			 g_conf->mon_cluster_log_to_syslog_facility);
+      if (!log_channels.count(le.channel)) {
+        dout(15) << __func__ << " unknow channel '"
+                 << le.channel << "' -- ignore" << dendl;
+        continue;
       }
-      if (g_conf->mon_cluster_log_file.length()) {
-	int min = string_to_syslog_level(g_conf->mon_cluster_log_file_level);
+
+      log_channel_info &info = log_channels[le.channel];
+
+      if (info.to_syslog) {
+        if (info.syslog_level.empty() || info.syslog_facility.empty()) {
+          dout(15) << __func__ << " channel '" << le.channel << "' should log"
+                   << " to syslog but missing level or facility ("
+                   << " level '" << info.syslog_level << "'"
+                   << " facility '" << info.syslog_facility << "')"
+                   << " -- ignore" << dendl;
+        } else {
+          le.log_to_syslog(info.syslog_level, info.syslog_facility);
+        }
+      }
+     
+      if (!info.file.empty()) {
+	int min = string_to_syslog_level(info.prio);
 	int l = clog_type_to_syslog_level(le.prio);
 	if (l <= min) {
 	  stringstream ss;
 	  ss << le << "\n";
-	  blog.append(ss.str());
+	  channel_blog[info.channel].append(ss.str());
 	}
       }
 
@@ -153,18 +169,32 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
 
-  if (blog.length()) {
-    int fd = ::open(g_conf->mon_cluster_log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
-    if (fd < 0) {
-      int err = -errno;
-      dout(1) << "unable to write to " << g_conf->mon_cluster_log_file << ": " << cpp_strerror(err) << dendl;
-    } else {
-      int err = blog.write_fd(fd);
-      if (err < 0) {
-	dout(1) << "error writing to " << g_conf->mon_cluster_log_file
-		<< ": " << cpp_strerror(err) << dendl;
+  if (channel_blog.size()) {
+    dout(15) << __func__ << " writing channel logs" << dendl;
+    for (map<string,bufferlist>::iterator p = channel_blog.begin();
+         p != channel_blog.end(); ++p) {
+      if (!p->second.length())
+        continue;
+
+      dout(15) << __func__ << "  writing channel '" << p->first << "'"
+               << " bl " << p->second.length() << " bytes" << dendl;
+
+      assert(log_channels.count(p->first)); // by now this must be true
+      string &fn = log_channels[p->first].file;
+
+      int fd = ::open(fn.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
+      if (fd < 0) {
+        int err = -errno;
+        dout(1) << "unable to write to " << fn
+                << ": " << cpp_strerror(err) << dendl;
+      } else {
+        int err = p->second.write_fd(fd);
+        if (err < 0) {
+          dout(1) << "error writing to " << fn
+            << ": " << cpp_strerror(err) << dendl;
+        }
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
       }
-      VOID_TEMP_FAILURE_RETRY(::close(fd));
     }
   }
 
