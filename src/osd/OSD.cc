@@ -2879,9 +2879,9 @@ void OSD::_remove_heartbeat_peer(int n)
 	   << " " << q->second.con_back->get_peer_addr()
 	   << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
 	   << dendl;
-  hbclient_messenger->mark_down(q->second.con_back);
+  q->second.con_back->mark_down();
   if (q->second.con_front) {
-    hbclient_messenger->mark_down(q->second.con_front);
+    q->second.con_front->mark_down();
   }
   heartbeat_peers.erase(q);
 }
@@ -3010,9 +3010,9 @@ void OSD::reset_heartbeat_peers()
   Mutex::Locker l(heartbeat_lock);
   while (!heartbeat_peers.empty()) {
     HeartbeatInfo& hi = heartbeat_peers.begin()->second;
-    hbclient_messenger->mark_down(hi.con_back);
+    hi.con_back->mark_down();
     if (hi.con_front) {
-      hbclient_messenger->mark_down(hi.con_front);
+      hi.con_front->mark_down();
     }
     heartbeat_peers.erase(heartbeat_peers.begin());
   }
@@ -3074,7 +3074,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 				curmap->get_epoch(),
 				MOSDPing::PING_REPLY,
 				m->stamp);
-      m->get_connection()->get_messenger()->send_message(r, m->get_connection());
+      m->get_connection()->send_message(r);
 
       if (curmap->is_up(from)) {
 	service.note_peer_epoch(from, m->map_epoch);
@@ -3091,7 +3091,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 				  curmap->get_epoch(),
 				  MOSDPing::YOU_DIED,
 				  m->stamp);
-	m->get_connection()->get_messenger()->send_message(r, m->get_connection());
+	m->get_connection()->send_message(r);
       }
     }
     break;
@@ -3254,17 +3254,16 @@ void OSD::heartbeat()
     if (i->second.first_tx == utime_t())
       i->second.first_tx = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
-    hbclient_messenger->send_message(new MOSDPing(monc->get_fsid(),
-						  service.get_osdmap()->get_epoch(),
-						  MOSDPing::PING,
-						  now),
-				     i->second.con_back);
+    i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
+					  service.get_osdmap()->get_epoch(),
+					  MOSDPing::PING,
+					  now));
+
     if (i->second.con_front)
-      hbclient_messenger->send_message(new MOSDPing(monc->get_fsid(),
-						    service.get_osdmap()->get_epoch(),
-						    MOSDPing::PING,
-						    now),
-				       i->second.con_front);
+      i->second.con_front->send_message(new MOSDPing(monc->get_fsid(),
+					     service.get_osdmap()->get_epoch(),
+						     MOSDPing::PING,
+						     now));
   }
 
   dout(30) << "heartbeat check" << dendl;
@@ -3303,11 +3302,11 @@ bool OSD::heartbeat_reset(Connection *con)
       dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
 	       << ", reopening" << dendl;
       if (con != p->second.con_back) {
-	hbclient_messenger->mark_down(p->second.con_back);
+	p->second.con_back->mark_down();
       }
       p->second.con_back.reset(NULL);
       if (p->second.con_front && con != p->second.con_front) {
-	hbclient_messenger->mark_down(p->second.con_front);
+	p->second.con_front->mark_down();
       }
       p->second.con_front.reset(NULL);
       pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
@@ -4065,7 +4064,7 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
   const entity_inst_t& peer_inst = next_map->get_cluster_inst(peer);
   Connection *peer_con = osd->cluster_messenger->get_connection(peer_inst).get();
   share_map_peer(peer, peer_con, next_map);
-  osd->cluster_messenger->send_message(m, peer_inst);
+  peer_con->send_message(m);
   release_map(next_map);
 }
 
@@ -4292,7 +4291,7 @@ void OSD::handle_command(MCommand *m)
   ConnectionRef con = m->get_connection();
   Session *session = static_cast<Session *>(con->get_priv());
   if (!session) {
-    client_messenger->send_message(new MCommandReply(m, -EPERM), con);
+    con->send_message(new MCommandReply(m, -EPERM));
     m->put();
     return;
   }
@@ -4301,7 +4300,7 @@ void OSD::handle_command(MCommand *m)
   session->put();
 
   if (!caps.allow_all() || m->get_source().is_mon()) {
-    client_messenger->send_message(new MCommandReply(m, -EPERM), con);
+    con->send_message(new MCommandReply(m, -EPERM));
     m->put();
     return;
   }
@@ -4743,7 +4742,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     MCommandReply *reply = new MCommandReply(r, rs);
     reply->set_tid(tid);
     reply->set_data(odata);
-    client_messenger->send_message(reply, con);
+    con->send_message(reply);
   }
   return;
 }
@@ -4920,7 +4919,7 @@ bool OSD::heartbeat_dispatch(Message *m)
   case CEPH_MSG_OSD_MAP:
     {
       ConnectionRef self = cluster_messenger->get_loopback_connection();
-      cluster_messenger->send_message(m, self);
+      self->send_message(m);
     }
     break;
 
@@ -5676,9 +5675,9 @@ void OSD::note_down_osd(int peer)
   failure_pending.erase(peer);
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(peer);
   if (p != heartbeat_peers.end()) {
-    hbclient_messenger->mark_down(p->second.con_back);
+    p->second.con_back->mark_down();
     if (p->second.con_front) {
-      hbclient_messenger->mark_down(p->second.con_front);
+      p->second.con_front->mark_down();
     }
     heartbeat_peers.erase(p);
   }
@@ -6405,10 +6404,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
 
 void OSDService::send_map(MOSDMap *m, Connection *con)
 {
-  Messenger *msgr = client_messenger;
-  if (entity_name_t::TYPE_OSD == con->get_peer_type())
-    msgr = cluster_messenger;
-  msgr->send_message(m, con);
+  con->send_message(m);
 }
 
 void OSDService::send_incremental_map(epoch_t since, Connection *con,
@@ -6589,7 +6585,7 @@ bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map)
 				map->get_cluster_addr(from) : entity_addr_t())
 	    << dendl;
     ConnectionRef con = m->get_connection();
-    cluster_messenger->mark_down(con.get());
+    con->mark_down();
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->session_dispatch_lock.Lock();
@@ -6999,7 +6995,7 @@ void OSD::do_notifies(
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
 					 it->second);
-      cluster_messenger->send_message(m, con.get());
+      con->send_message(m);
     } else {
       dout(7) << "do_notify osd " << it->first
 	      << " sending separate messages" << dendl;
@@ -7011,7 +7007,7 @@ void OSD::do_notifies(
 	list[0] = *i;
 	MOSDPGNotify *m = new MOSDPGNotify(i->first.epoch_sent,
 					   list);
-	cluster_messenger->send_message(m, con.get());
+	con->send_message(m);
       }
     }
   }
@@ -7038,7 +7034,7 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
-      cluster_messenger->send_message(m, con.get());
+      con->send_message(m);
     } else {
       dout(7) << "do_queries querying osd." << who
 	      << " sending saperate messages "
@@ -7049,7 +7045,7 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
 	map<spg_t, pg_query_t> to_send;
 	to_send.insert(*i);
 	MOSDPGQuery *m = new MOSDPGQuery(i->second.epoch_sent, to_send);
-	cluster_messenger->send_message(m, con.get());
+	con->send_message(m);
       }
     }
   }
@@ -7081,7 +7077,7 @@ void OSD::do_infos(map<int,
     if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
-      cluster_messenger->send_message(m, con.get());
+      con->send_message(m);
     } else {
       for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
 	     p->second.begin();
@@ -7091,7 +7087,7 @@ void OSD::do_infos(map<int,
 	to_send[0] = *i;
 	MOSDPGInfo *m = new MOSDPGInfo(i->first.epoch_sent);
 	m->pg_list = to_send;
-	cluster_messenger->send_message(m, con.get());
+	con->send_message(m);
       }
     }
   }
@@ -7456,7 +7452,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 	  osdmap->get_epoch(), empty,
 	  it->second.epoch_sent);
 	service.share_map_peer(from, con.get(), osdmap);
-	cluster_messenger->send_message(mlog, con.get());
+	con->send_message(mlog);
       }
     } else {
       notify_list[from].push_back(
@@ -7765,7 +7761,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags,
 				       true);
   reply->set_reply_versions(v, uv);
-  m->get_connection()->get_messenger()->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
 }
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
