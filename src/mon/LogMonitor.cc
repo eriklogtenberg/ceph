@@ -622,8 +622,10 @@ void LogMonitor::update_log_channels()
     log_channel_info &info = log_channels[p->first];
     info.channel = p->first; // in case it wasn't initialized above
     info.file = get_str_map_val(log_file, p->first, "");
-    if (!info.file.empty())
-      info.prio = get_str_map_val(log_file_level, p->first, "");
+    if (!info.file.empty()) {
+      // defaulting here to 'info' seems reasonable
+      info.prio = get_str_map_val(log_file_level, p->first, "info");
+    }
   }
 
   dout(10) << __func__ << " ";
