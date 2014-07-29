@@ -119,7 +119,7 @@ private:
     g_conf->remove_observer(this);
   }
 
-  const chat **get_tracket_conf_keys() const {
+  const char **get_tracked_conf_keys() const {
     static const char* KEYS[] = {
       "mon_cluster_log_to_syslog",
       "mon_cluster_log_to_syslog_level",
