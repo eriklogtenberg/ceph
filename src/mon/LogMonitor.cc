@@ -548,3 +548,87 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
 	   << mlog->entries.size() << " entries)" << dendl;
 }
 
+void LogMonitor::update_log_channels()
+{
+  map<string,string> log_to_syslog;
+  map<string,string> syslog_level;
+  map<string,string> syslog_facility;
+  map<string,string> log_file;
+  map<string,string> log_file_level;
+  ostringstream oss;
+
+  int r = get_str_map(g_conf->mon_cluster_log_channel_to_syslog,
+                      oss, &log_to_syslog);
+  assert(r == 0);
+  r = get_str_map(g_conf->mon_cluster_log_to_syslog_level,
+                  oss, &syslog_level);
+  assert(r == 0);
+  r = get_str_map(g_conf->mon_cluster_log_to_syslog_facility,
+                  oss, &syslog_facility);
+  assert(r == 0);
+  r = get_str_map(g_conf->mon_cluster_log_file, oss, &log_file);
+  assert(r == 0);
+  r = get_str_map(g_conf->mon_cluster_log_file_level, oss, &log_file_level);
+  assert(r == 0);
+
+  string def_channel = clog_channel_to_string(CLOG_CHANNEL_DEFAULT);
+  log_channel_info &def_info = log_channel_info[def_channel];
+
+  def_info.channel = def_channel;
+  def_info.prio = get_str_map_val(log_file_level, def_channel, "");
+  def_info.syslog_facility = get_str_map_val(syslog_facility, def_channel, "");
+  def_info.syslog_level = get_str_map_val(syslog_level, def_channel, "");
+  def_info.file = get_str_map_val(syslog_file, def_channel, "");
+  string def_to_syslog = get_str_map_val(syslog_file, def_channel, "false");
+  def_info.to_syslog = (def_channel == "true");
+
+  // are we dealing with a map with multiple KV entries?
+  for (map<string,string>::iterator p = log_to_syslog.begin();
+       log_to_syslog.size() > 1 && p != log_to_syslog.end(); ++p) {
+    // we already dealt with default channel above
+    if (p->first == def_channel)
+      continue;
+    if (p->second.empty()) {
+      // map must be using a weird format
+      derr << __func__ << " option 'mon_cluster_channel_to_syslog'"
+           << " has an incorrect format: expected to have a key-value"
+           << " pair, got '" << p->first << "'" << dendl;
+      break;
+    }
+
+    log_channel_info &info = log_channels[p->first];
+    info.channel = p->first;
+    info.to_syslog = (p->second == "true");
+
+    if (info.to_syslog) {
+      info.syslog_facility = get_str_map_val(syslog_facility, p->first, "");
+      info.syslog_level = get_str_map_val(syslog_level, p->first, "");
+    }
+  }
+
+  // are we dealing with a map with multiple KV entries?
+  for (map<string,string>::iterator p = log_file.begin();
+       log_file.size() > 1 && p != log_file.end(); ++p) {
+    if (p->first == def_channel)
+      continue;
+    if (p->second.empty()) {
+      // map must be using weird format
+      derr << __func__ << " option 'mon_cluster_file'"
+           << " has an incorrect format: expected to have a key-value"
+           << " pair, got '" << p->first << "'" << dendl;
+    }
+
+    log_channel_info &info = log_channels[p->first];
+    info.channel = p->first; // in case it wasn't initialized above
+    info.file = get_str_map_val(log_file, p->first, "");
+    if (!info.file.empty())
+      info.prio = get_str_map_val(log_file_level, p->first, "");
+  }
+
+  dout(10) << __func__ << " ";
+  for (map<string,log_channel_info>::iterator p = log_channels.begin();
+       p != log_channels.end(); ++p) {
+    *_dout << p->second;
+  }
+  *_dout << dendl;
+}

@@ -51,7 +51,8 @@ OPTION(clog_to_syslog_facility, OPT_STR, "audit=local0 cluster=daemon")
 OPTION(audit_clog_to_monitors, OPT_BOOL, false)
 OPTION(audit_clog_to_syslog, OPT_BOOL, false)
 
-OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false)
+OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false) // obsolete: please remove at your earliest convinience
+OPTION(mon_cluster_log_channel_to_syslog, OPT_STR, "audit=false cluster=false")
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR, "info")   // this level and above
 OPTION(mon_cluster_log_to_syslog_facility, OPT_STR, "daemon")
 OPTION(mon_cluster_log_file, OPT_STR, "/var/log/ceph/$cluster.log")

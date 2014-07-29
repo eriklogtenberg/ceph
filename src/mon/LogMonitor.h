@@ -33,6 +33,22 @@ private:
   multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
 
+
+  struct log_channel_info {
+    string channel;
+    string prio;
+    string file;
+
+    string syslog_facility;
+    string syslog_level;
+    bool to_syslog;
+
+    log_channel_info() : to_syslog(false) {}
+  };
+  map<string, log_channel_info> log_channels;
+
+  void update_log_channels();
+
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
@@ -96,4 +112,14 @@ private:
 
 };
 
+inline ostream& operator<<(ostream& out, LogMonitor::log_channel_info& info)
+{
+  out << info.channel << "(" << info.prio << " " << info.file;
+  if (info.to_syslog) {
+    out << " syslog(" << info.syslog_facility
+      << " " << info.syslog_level << ")";
+  }
+  out << ")";
+  return out;
+}
 #endif
