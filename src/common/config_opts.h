@@ -46,8 +46,8 @@ OPTION(log_stop_at_utilization, OPT_FLOAT, .97)  // stop logging at (near) full
 
 OPTION(clog_to_monitors, OPT_BOOL, true)
 OPTION(clog_to_syslog, OPT_BOOL, false)
-OPTION(clog_to_syslog_level, OPT_STR, "audit=info default=info")         // this level and above
-OPTION(clog_to_syslog_facility, OPT_STR, "audit=local0 default=daemon")
+OPTION(clog_to_syslog_level, OPT_STR, "audit=info cluster=info")         // this level and above
+OPTION(clog_to_syslog_facility, OPT_STR, "audit=local0 cluster=daemon")
 OPTION(audit_clog_to_monitors, OPT_BOOL, false)
 OPTION(audit_clog_to_syslog, OPT_BOOL, false)
 
