@@ -111,7 +111,7 @@ private:
    */
   int sub_name_to_id(const string& n);
 
-  int init() {
+  void init() {
     g_conf->add_observer(this);
   }
 
@@ -133,15 +133,4 @@ private:
   void handle_conf_change(const struct md_config_t *conf,
                           const std::set<std::string> &changed);
 };
-
-inline ostream& operator<<(ostream& out, LogMonitor::log_channel_info& info)
-{
-  out << info.channel << "(" << info.prio << " " << info.file;
-  if (info.to_syslog) {
-    out << " syslog(" << info.syslog_facility
-      << " " << info.syslog_level << ")";
-  }
-  out << ")";
-  return out;
-}
 #endif

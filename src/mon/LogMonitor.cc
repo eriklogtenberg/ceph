@@ -30,6 +30,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 #include "include/compat.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -572,14 +573,14 @@ void LogMonitor::update_log_channels()
   assert(r == 0);
 
   string def_channel = clog_channel_to_string(CLOG_CHANNEL_DEFAULT);
-  log_channel_info &def_info = log_channel_info[def_channel];
+  log_channel_info &def_info = log_channels[def_channel];
 
   def_info.channel = def_channel;
   def_info.prio = get_str_map_val(log_file_level, def_channel, "");
   def_info.syslog_facility = get_str_map_val(syslog_facility, def_channel, "");
   def_info.syslog_level = get_str_map_val(syslog_level, def_channel, "");
-  def_info.file = get_str_map_val(syslog_file, def_channel, "");
-  string def_to_syslog = get_str_map_val(syslog_file, def_channel, "false");
+  def_info.file = get_str_map_val(log_file, def_channel, "");
+  string def_to_syslog = get_str_map_val(log_to_syslog, def_channel, "false");
   def_info.to_syslog = (def_channel == "true");
 
   // are we dealing with a map with multiple KV entries?
@@ -628,7 +629,13 @@ void LogMonitor::update_log_channels()
   dout(10) << __func__ << " ";
   for (map<string,log_channel_info>::iterator p = log_channels.begin();
        p != log_channels.end(); ++p) {
-    *_dout << p->second;
+    log_channel_info &i = p->second;
+    *_dout << i.channel << "(" << i.prio << " " << i.file;
+    if (i.to_syslog) {
+      *_dout << " syslog(" << i.syslog_facility
+             << " " << i.syslog_level << ")";
+    }
+    *_dout << ") ";
   }
   *_dout << dendl;
 }
