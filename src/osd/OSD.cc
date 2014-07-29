@@ -1905,8 +1905,8 @@ PG *OSD::_open_lock_pg(
     pg_map[pgid] = pg;
     pg->get("PGMap");  // because it's in pg_map
     service.pg_add_epoch(pg->info.pgid, createmap->get_epoch());
-    wake_pg_waiters(pg, pgid);
   }
+  wake_pg_waiters(pg, pgid);
   return pg;
 }
 
@@ -1937,7 +1937,6 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   pg->get("PGMap");  // For pg_map
   pg_map[pg->info.pgid] = pg;
   service.pg_add_epoch(pg->info.pgid, pg->get_osdmap()->get_epoch());
-  wake_pg_waiters(pg, pg->info.pgid);
 
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
@@ -8246,6 +8245,7 @@ struct C_CompleteSplits : public Context {
         osd->service.complete_split(to_complete);
       }
       osd->pg_map_lock.put_write();
+      osd->wake_pg_waiters(&**i, (*i)->info.pgid);
       osd->dispatch_context_transaction(rctx, &**i);
 	to_complete.insert((*i)->info.pgid);
       (*i)->unlock();
