@@ -19,12 +19,12 @@ ceph_filestore_tool_LDADD += -ldl
 endif # LINUX
 bin_PROGRAMS += ceph_filestore_tool
 
-ceph_filestore_dump_SOURCES = tools/ceph_filestore_dump.cc
-ceph_filestore_dump_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
+ceph_objectstore_dump_SOURCES = tools/ceph_objectstore_dump.cc
+ceph_objectstore_dump_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
-ceph_filestore_dump_LDADD += -ldl
+ceph_objectstore_dump_LDADD += -ldl
 endif # LINUX
-bin_PROGRAMS += ceph_filestore_dump
+bin_PROGRAMS += ceph_objectstore_dump
 
 monmaptool_SOURCES = tools/monmaptool.cc
 monmaptool_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)
